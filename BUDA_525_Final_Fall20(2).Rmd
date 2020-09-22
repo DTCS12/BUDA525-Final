@@ -1,18 +1,13 @@
 ---
-title: "BUDA 525 Final— Group Assignment-- DUE OCT 2, 2019 by 11:59PM"
-author: "Brad Price"
-date: "9/16/2020"
+title: "BUDA 525 Final— Group Assignment"
+author: "Team Eisland"
+date: "10/02/2020"
 output: word_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
-## Directions
-
-This is the final group project for BUDA 525.  Submit both the .Rmd and word document to the appropriate link on ecampus by 11:59 on Friday October 2, 2020.  There are 4 questions on this assignment.  The first two questions are discussion type questions which require no data analysis but do require substantial insights into the material that has been covered.  The final two questions are data analysis type questions which require you to analyze data and communicate relevant findings.  You should only show results in this document that relevant to your discussions. Remember you can use ECHO=FALSE, and other R markdown arguments to present your code.  Since I have the .Rmd I can see all code that was not presented in the word document. 
-
 
 ## Problem 1 (20 points)
 
