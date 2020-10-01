@@ -1,0 +1,245 @@
+---
+title: "Final Problem 4"
+author: "Doug Todd, Nemi Sinclair"
+date: "9/29/2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Problem 4 (30 Points)
+
+*The `Salaries` data in the `carData` package contains information on academic salaries in 2008 and 2009 in a college in the US. A data dictionary can be found in the `help` file for the data. This data was collected as part of an on-going effort of the college to monitor salary differences between male and female faculty members.*  
+
+## Exploration
+
+Analyze data set Salaries in carData package and the help function will provide us the needed information about the units for each variable.
+We will look at the Summary and see the ratios between min. and max. and the means.
+```{r}
+library(carData)
+help(Salaries)
+head(Salaries)
+str(Salaries)
+plot(Salaries)
+```
+Variable units:
+rank: a factor with levels AssocProf, AsstProf, Prof
+discipline: a factor with levels A (“theoretical” departments) or B (“applied” departments)
+yrs.since.phd: years since PhD.
+yrs.service: years of service.
+sex:a factor with levels Female Male
+salary: nine-month salary, in dollars.
+
+Our data has 397 observations on 6 variables with values >=0. 
+We can see our data has different types of variables: factor and integer.
+
+The data has more male than female employees; we will look at this in part 1. 
+
+## Part 1
+*We have been asked to investigate the gender gap in the data, but also what other information that may be relevant to administrators (i.e. salary growth for years of service, discipline based growth, etc).  Investigate if there is a gender gap pay gap.*   
+
+**Initial model and two sample t-test on the following hypotheses:**
+$$H_0: Male Salary <= Female Salary$$
+$$H_A: Male Salary > Female Salary$$
+```{r}
+t.test(x=Salaries$salary[Salaries$sex=="Male"],y=Salaries$salary[Salaries$sex=="Female"],alternative = "greater")
+```
+
+**Initial t-test does indicate $H_0: Male Salary <= Female Salary$ should be rejected, i.e. Male Salary is higher than Female. But the question is: how are other factors affecting salary? Upon further investigation, can we confirm this finding is true or disprove it?**  
+**There are a lot of factors which contribute to salary. We know experience, education level, etc. generally contribute to salary levels. What are their impacts here? Is discretion based on these things? If gender based discretion is occurring, could it be regarding promotions and resulting in a third order consequence of pay difference?**
+
+Tables ratios for rank and discipline between male and female employees:
+```{r}
+RankTable<-as.data.frame.matrix(table(Salaries$rank,Salaries$sex))
+RankTable$FMRatio<-round(RankTable$Female/RankTable$Male,digits = 2)
+RankTable
+
+DisTable<-as.data.frame.matrix(table(Salaries$discipline,Salaries$sex))
+DisTable$FMRatio<-round(DisTable$Female/DisTable$Male,digits = 2)
+DisTable
+```
+
+**Compare other means:**
+$$H_0: Applied Discipline Salary <= Theoretical Discipline Salary$$
+```{r}
+t.test(x=Salaries$salary[Salaries$discipline=="B"],y=Salaries$salary[Salaries$discipline=="A"],alternative = "greater") 
+```
+
+**Reject $H_0$, Applied Disciplines have a larger mean salary of approximately $10,000.**  
+
+$$H_0: Male Years Service <= Female Years Service$$
+```{r}
+t.test(x=Salaries$yrs.service[Salaries$sex=="Male"],y=Salaries$yrs.service[Salaries$sex=="Female"],alternative = "greater")
+```
+
+**Reject $H_0$, on average Males have more years of service by approximately 6 years.**  
+
+$$H_0: Male Years SincePHD <= Female Years SincePHD$$
+
+```{r}
+t.test(x=Salaries$yrs.since.phd[Salaries$sex=="Male"],y=Salaries$yrs.since.phd[Salaries$sex=="Female"],alternative = "greater")
+```
+
+**Reject $H_0$, on average Males have more years since PhD by approximately 6 years.**  
+
+**Fit Model 1**
+```{r}
+SalM1<-lm(salary~.,data=Salaries) #Model 1, original with all data
+summary(Salaries)
+summary(SalM1)
+par(mfrow=c(2,2))
+plot(SalM1)
+```
+**Model 1 clearly has non-constant variance, start exploring transformations**
+```{r}
+par(mfrow=c(1,1))
+boxCox(SalM1)
+invResPlot(SalM1)
+```
+
+We will use 1/Salary as transformation
+```{r}
+SalM2<-lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries) #Model 2
+summary(SalM2)
+par(mfrow=c(2,2))
+plot(SalM2)
+```
+The residual plot shows constant variance, but we will run the ncvTest to make sure we don't have NCV.
+The Normal Q-Q plot shows normality, the data points fall approximately along with the reference line, and we tails and outliers.
+The Scale-Location plot does not show a significant trend.
+The last plot shows the cook's distance lines, but we do not have data points in the area between 0.5 or 1.0, which is good.
+
+We will test for non-constant variance by analyzing the relationship between residuals square and the fitted values by using
+the R function ncvTest()
+```{r}
+ncvTest(m1)
+plot(m1$residuals^2 ~ m1$fitted.values, main='Non-Constant-Variance Testplot')
+```
+The ncvTest() provides us a p-value from 1.0938e-08, which is smaller than 0.05, meaning we fail to reject the null hypothesis. We can infer the data is homoscedastic; we do not have NCV. General, the residuals from a theoretical model equal zero. The plot indicates as well as constant variance.
+
+To see if we can remove variables from our model, we will use the step-function.
+```{r}
+step(SalM2,direction = "backward")
+step(SalM2,scope = list(lower=~1,upper=1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries),direction = "forward")
+step(SalM2,scope = list(lower=~1,upper=1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries))
+```
+
+**We will create a few models just to make sure we have the best possible modle.**
+
+We will create another model with a few indicators rank*sex, rank*yrs.service, rank*discipline, sex*discipline and look if we can remove variables
+```{r}
+SalM4<- lm(log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service +rank*sex +rank*yrs.service +rank*discipline+sex*discipline, data= Salaries) #Model 4
+step(SalM4, dircetion='backward')
+```
+**Our backward selction recommends us to remove all interactions and use our previous model.**
+
+We will use instead 1/Salary the log transformation
+```{r}
+SalM3<- lm(log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service, data= Salaries)
+AIC(SalM2,SalM3)
+```
+We always will look for smaller values of AIC = small sum of squares and little complexity. Model M3 has a smaller AIC score and is probably better. We will conduct a 5 Fold Cross-Validation in part 2, to compare Model SalM3 and SalM2.
+
+
+## Part 2
+*provide insights on other drivers that you may see of salary in the data(i.e. provide a best model).Is your model suitable to make offers based on the infromation provided?  Explain your reasoning.  Provide insights into any other information you find of interest.*  
+
+We will compare Model1 and Model2 with the 5 Fold Cross-Validation.
+First, we will split the data into 5 randomly mixed sets and add a sample ID on each set. We will set the seed to 2020.      
+After that, We will combine all the prediction errors for the prediction error metric.
+
+***5 Fold Cross Validation***
+```{r}
+library(foreach)
+set.seed(2020)
+##creating a random selection of the observation numbers
+Samp=sample(1:dim(Salaries)[1],dim(Salaries),replace=FALSE)
+id=rep(5, dim(Salaries)[1])
+id[Samp[1:99]]=1
+id[Samp[100:198]]=2
+id[Samp[199:297]]=3
+id[Samp[298:396]]=4
+  
+Rssm1=0
+Rssm2=0
+k=foreach(i=1:5)%do%
+  {
+    sets=which(id==i)
+      # remove set
+      Mod1<- lm(log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service, data= Salaries[-sets,])
+      Mod2<- lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries[-sets,])
+      # predict the removed-set with each model
+      pm1<- predict(Mod1, newdata=Salaries[sets,])
+      pm2<- predict(Mod2, newdata=Salaries[sets,])
+      # How bad is my model  / RSS
+      Rssm1=Rssm1+sum((log(Salaries$salary[sets])-pm1)^2)
+      Rssm2=Rssm2+sum((log(Salaries$salary[sets])-pm2)^2)
+      li=list(Rssm1=Rssm1,Rssm2=Rssm2)
+      return(li)
+  }
+  # add rssm values together
+  sum(sapply(k,function(d){d$Rssm1}))
+  sum(sapply(k,function(d){d$Rssm2}))
+  
+```
+***Model 2 has a smaller rssm value and is the better predictor***
+
+We will look at our summary and effect plot for any other insights
+```{r}
+par(mfrow=c(2,2))
+plot(SalM3)
+summary(SalM3)
+plot(allEffects(SalM3))
+```
+The residual plot shows constant variance.
+The Normal Q-Q plot shows normality, the data points fall approximately along with the reference line, and we tails and outliers.
+The Scale-Location plot does not show a significant trend.
+The last plot shows the cook's distance lines, but we do not have data points in the area between 0.5 or 1.0, which is good.
+
+The R-squared is 0.5247; this indicates that our model explains 52.47% of the average log salary variation.
+
+The intercept 11.10 is the average log salary for females, with the rank Associate Professor and discipline theoretical department, when all other variables equal 0. 
+
+The p-value of sex is not significant, which indicates that the levels of sex are not associated with significant different salaries when all other variables are held constant.
+The p-value of rank is significant, which indicates that the levels of rank are associated with significant different salaries when all other variables are held constant.
+The p-value of discipline is significant, which indicates that discipline levels are associated with significant different salaries when all other variables are held constant.
+
+Effect Plot:
+The effect Plot indicates that a female employee can earn as much as a male employee or less. . 
+When switching from Associate Professor to Professor, the average log salary increases significantly when all other variables are held constant. 
+The average log salary increases when we switch levels von discipline A to B, when all other variables are held constant.
+The average log salary decreases when years of service increases when all other variables are held constant.
+
+Our T-tests fom part 1 provides us the following insights.
+On average Male Salary is higher than Female
+Applied Disciplines have a larger mean salary of approximately $10,000. 
+On average Males have more years of service by approximately 6 years. 
+On average Males have more years since PhD by approximately 6 years. 
+
+We think our model is suitable and can deliver offers based on the provided information because we build our model with all significant predictors, which influence our response variable Salary. For example, we predict the salary range from a new employee with the following attributes:
+sex="Male", -> should not influence our salary
+rank="AsstProf", 
+discipline="A", 
+yrs.service=1, 
+yrs.since.phd=4
+
+95% PI
+```{r}
+attach(Salaries)
+newEmployee= data.frame(sex="Male", rank="AsstProf", discipline="A", yrs.service=1, yrs.since.phd=4)
+
+predictPI<- predict(SalM3, newEmployee, interval="prediction", level=0.95)
+predictPI
+```
+
+The 95%-prediction interval indicates that the average log nine-month salary will be between 10.85 (exp(10.85816)= 51956.39 dollars) and 11.576 (exp(11.57622)=106534.1 dollars). 
+
+
+
+
+
+
