@@ -2,16 +2,16 @@
 title: "Final Problem 4"
 author: "Doug Todd, Nemi Sinclair"
 date: "9/29/2020"
-output:
-  word_document: default
-  html_document: default
+output: html_document
+ # word_document: default
+  #html_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
-### Problem 4 (30 Points)
+### Problem 4
 
 *The `Salaries` data in the `carData` package contains information on academic salaries in 2008 and 2009 in a college in the US. A data dictionary can be found in the `help` file for the data. This data was collected as part of an on-going effort of the college to monitor salary differences between male and female faculty members.*  
 
@@ -21,18 +21,20 @@ Analyze data set Salaries in carData package and the help function will provide 
 We will look at the Summary and see the ratios between min. and max. and the means.
 ```{r}
 library(carData)
-help(Salaries)
+#help(Salaries)
 head(Salaries)
 str(Salaries)
 plot(Salaries)
 ```
-Variable units:
-rank: a factor with levels AssocProf, AsstProf, Prof
-discipline: a factor with levels A (“theoretical” departments) or B (“applied” departments)
-yrs.since.phd: years since PhD.
-yrs.service: years of service.
-sex:a factor with levels Female Male
-salary: nine-month salary, in dollars.
+
+|Variables       | Description                                                |
+|:--------------:|:----------------------------------------------------------:|
+| rank        | a factor with levels AssocProf, AsstProf, Prof |
+|discipline  | a factor with levels A (“theoretical” departments) or B (“applied” departments)|
+|yrs.since.phd | years since PhD. |
+|yrs.service | years of service. |
+|sex | a factor with levels Female Male |
+|salary | nine-month salary, in dollars |
 
 Our data has 397 observations on 6 variables with values >=0. 
 We can see our data has different types of variables: factor and integer.
@@ -43,8 +45,8 @@ The data has more male than female employees; we will look at this in part 1.
 *We have been asked to investigate the gender gap in the data, but also what other information that may be relevant to administrators (i.e. salary growth for years of service, discipline based growth, etc).  Investigate if there is a gender gap pay gap.*   
 
 **Initial model and two sample t-test on the following hypotheses:**
-$$H_0: Male Salary <= Female Salary$$
-$$H_A: Male Salary > Female Salary$$
+$$H_0: Male\ Salary <= Female\ Salary$$
+$$H_A: Male\ Salary > Female\ Salary$$
 ```{r}
 t.test(x=Salaries$salary[Salaries$sex=="Male"],y=Salaries$salary[Salaries$sex=="Female"],alternative = "greater")
 ```
@@ -64,21 +66,21 @@ DisTable
 ```
 
 **Compare other means:**
-$$H_0: Applied Discipline Salary <= Theoretical Discipline Salary$$
+$$H_0: Applied\ Discipline\ Salary <= Theoretical\ Discipline\ Salary$$
 ```{r}
 t.test(x=Salaries$salary[Salaries$discipline=="B"],y=Salaries$salary[Salaries$discipline=="A"],alternative = "greater") 
 ```
 
-**Reject $H_0$, Applied Disciplines have a larger mean salary of approximately $10,000.**  
+**Reject $H_0$, Applied Disciplines have a larger mean salary of approximately $10,000. But given the equal female/male ratios shown in the discipline table, this difference is an unlikely alternate contributor to the pay gap we saw initially.**  
 
-$$H_0: Male Years Service <= Female Years Service$$
+$$H_0: Male\ Years\ Service <= Female\ Years\ Service$$
 ```{r}
 t.test(x=Salaries$yrs.service[Salaries$sex=="Male"],y=Salaries$yrs.service[Salaries$sex=="Female"],alternative = "greater")
 ```
 
 **Reject $H_0$, on average Males have more years of service by approximately 6 years.**  
 
-$$H_0: Male Years SincePHD <= Female Years SincePHD$$
+$$H_0: Male\ Years\ SincePHD <= Female\ Years\ SincePHD$$
 
 ```{r}
 t.test(x=Salaries$yrs.since.phd[Salaries$sex=="Male"],y=Salaries$yrs.since.phd[Salaries$sex=="Female"],alternative = "greater")
@@ -86,7 +88,7 @@ t.test(x=Salaries$yrs.since.phd[Salaries$sex=="Male"],y=Salaries$yrs.since.phd[S
 
 **Reject $H_0$, on average Males have more years since PhD by approximately 6 years.**  
 
-**Fit Model 1**
+**Fit the first Model: Salary ~ all predictors with no transformations**
 ```{r}
 SalM1<-lm(salary~.,data=Salaries) #Model 1, original with all data
 summary(Salaries)
@@ -94,32 +96,35 @@ summary(SalM1)
 par(mfrow=c(2,2))
 plot(SalM1)
 ```
+
 **Model 1 clearly has non-constant variance, start exploring transformations**
 ```{r}
+library(car)
 par(mfrow=c(1,1))
 boxCox(SalM1)
 invResPlot(SalM1)
 ```
 
-We will use 1/Salary as transformation
+**Both *BoxCox* and *Inverse Response Plots* indicate the 1/Salary transformation may be best. And from the summary, the log of *yrs.since.phd* will likely be appropriate for the predictor side.**
 ```{r}
 SalM2<-lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries) #Model 2
 summary(SalM2)
 par(mfrow=c(2,2))
 plot(SalM2)
 ```
-The residual plot shows constant variance, but we will run the ncvTest to make sure we don't have NCV.
-The Normal Q-Q plot shows normality, the data points fall approximately along with the reference line, and we tails and outliers.
-The Scale-Location plot does not show a significant trend.
-The last plot shows the cook's distance lines, but we do not have data points in the area between 0.5 or 1.0, which is good.
 
-We will test for non-constant variance by analyzing the relationship between residuals square and the fitted values by using
-the R function ncvTest()
+**The residual plot shows constant variance, but we will run the ncvTest to make sure we don't have NCV.**  
+**The Normal Q-Q plot shows normality, the data points fall approximately along with the reference line.**  
+**The Scale-Location plot does not show a significant trend.**  
+**The last plot does not show the cook's distance lines in the window; we do not have data points above 0.5, indicating no outliers being present.**  
+
+**We will test for non-constant variance of the second model by analyzing the relationship between residuals square and the fitted values by using the R function ncvTest()**
 ```{r}
-ncvTest(m1)
-plot(m1$residuals^2 ~ m1$fitted.values, main='Non-Constant-Variance Testplot')
+ncvTest(SalM2)
+plot(SalM2$residuals^2 ~ SalM2$fitted.values, main='Non-Constant-Variance Testplot')
 ```
-The ncvTest() provides us a p-value from 1.0938e-08, which is smaller than 0.05, meaning we fail to reject the null hypothesis. We can infer the data is homoscedastic; we do not have NCV. General, the residuals from a theoretical model equal zero. The plot indicates as well as constant variance.
+
+**The ncvTest() provides us a p-value smaller than 0.05, meaning we fail to reject the null hypothesis. We can infer the data is homoscedastic; we do not have NCV. Generally, the residuals from a theoretical model equal zero. The plot indicates constant variance as well.**  
 
 To see if we can remove variables from our model, we will use the step-function.
 ```{r}
@@ -128,27 +133,37 @@ step(SalM2,scope = list(lower=~1,upper=1/salary~rank+discipline+log(yrs.since.ph
 step(SalM2,scope = list(lower=~1,upper=1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries))
 ```
 
-**We will create a few models just to make sure we have the best possible modle.**
+**These indicate we should remove *log(yrs.since.phd)*. We will create a few models just to make sure we have the best possible model.**
 
-We will create another model with a few indicators rank*sex, rank*yrs.service, rank*discipline, sex*discipline and look if we can remove variables
+**We will create another model to test a few interactions: rank*sex, rank*yrs.service, rank*discipline, sex*discipline.**  
 ```{r}
-SalM4<- lm(log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service +rank*sex +rank*yrs.service +rank*discipline+sex*discipline, data= Salaries) #Model 4
-step(SalM4, dircetion='backward')
+SalM4<- lm(1/salary~sex+rank+discipline+log(yrs.since.phd)+yrs.service +rank*sex +rank*yrs.service +rank*discipline+sex*discipline, data= Salaries) #Model 4
+step(SalM4, direction = "backward")
 ```
-**Our backward selction recommends us to remove all interactions and use our previous model.**
 
-We will use instead 1/Salary the log transformation
+**Our backward selection recommends us to remove all interactions and use our previous model.**
+
+**Removing the interactions and *log(yrs.since.phd)* as the previous exercises have suggested, we generate the the following model and test it against Model 2.**
 ```{r}
-SalM3<- lm(log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service, data= Salaries)
+SalM3<- lm(1/salary~sex+rank+discipline+yrs.service, data= Salaries)
 AIC(SalM2,SalM3)
 ```
-We always will look for smaller values of AIC = small sum of squares and little complexity. Model M3 has a smaller AIC score and is probably better. We will conduct a 5 Fold Cross-Validation in part 2, to compare Model SalM3 and SalM2.
+
+**As we can see, the AIC for Model 2 (including *log(yrs.since.phd)*) is marginally better, so we will leave this in the model.**  
+**However, since we are exploring the influence of sex first to determine if a pay gap exists, we should test a model excluding sex as a predictor. Model 5:**
+```{r}
+SalM5<- lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service, data= Salaries)
+AIC(SalM2,SalM5)
+```
+We always will look for smaller values of AIC (lowest sum of squares least complexity). Model 2 has a slightly smaller AIC score and is probably better. We will conduct a 5 Fold Cross-Validation in part 2, to compare Model 5 and Model 2.
+$Model\ 2:\ 1/salary:rank+discipline+log(yrs.since.phd)+yrs.service+sex$
+$Model\ 5:\ 1/salary:rank+discipline+log(yrs.since.phd)+yrs.service$
 
 
 ## Part 2
-*provide insights on other drivers that you may see of salary in the data(i.e. provide a best model).Is your model suitable to make offers based on the infromation provided?  Explain your reasoning.  Provide insights into any other information you find of interest.*  
+*provide insights on other drivers that you may see of salary in the data(i.e. provide a best model).Is your model suitable to make offers based on the information provided?  Explain your reasoning.  Provide insights into any other information you find of interest.*  
 
-We will compare Model1 and Model2 with the 5 Fold Cross-Validation.
+We will compare Model 2 and Model 5 with the 5 Fold Cross-Validation.
 First, we will split the data into 5 randomly mixed sets and add a sample ID on each set. We will set the seed to 2020.      
 After that, We will combine all the prediction errors for the prediction error metric.
 
@@ -170,8 +185,8 @@ k=foreach(i=1:5)%do%
   {
     sets=which(id==i)
       # remove set
-      Mod1<- lm(log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service, data= Salaries[-sets,])
-      Mod2<- lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries[-sets,])
+      Mod1<- lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex, data= Salaries[-sets,])
+      Mod2<- lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service,data=Salaries[-sets,])
       # predict the removed-set with each model
       pm1<- predict(Mod1, newdata=Salaries[sets,])
       pm2<- predict(Mod2, newdata=Salaries[sets,])
@@ -186,19 +201,30 @@ k=foreach(i=1:5)%do%
   sum(sapply(k,function(d){d$Rssm2}))
   
 ```
-***Model 2 has a smaller rssm value and is the better predictor***
+
+**Applying 5-fold cross validation to compare these models shows there is not an improvement by adding sex as a predictor. Therefore, the simpler model excluding sex should be used and a gender based pay gap may not exist. Given that Model 5 happens to be a sub-model of Model 2, we can also compare them via ANOVA:**
+
+```{r}
+anova(SalM5,SalM2)
+```
+
+**With $p-value > 0.05$, we fail to reject $H_0$ => conclude the models are the same => use the less complex *Model 5* excluding sex as a predictor. This confirms the previous assertion that a gender based pay gap does not exist.**
 
 We will look at our summary and effect plot for any other insights
 ```{r}
+library(effects)
 par(mfrow=c(2,2))
-plot(SalM3)
-summary(SalM3)
-plot(allEffects(SalM3))
+plot(SalM5)
+summary(SalM5)
+plot(allEffects(SalM5))
 ```
-The residual plot shows constant variance.
-The Normal Q-Q plot shows normality, the data points fall approximately along with the reference line, and we tails and outliers.
-The Scale-Location plot does not show a significant trend.
-The last plot shows the cook's distance lines, but we do not have data points in the area between 0.5 or 1.0, which is good.
+
+**Through the exploration above, it appears the best model is Model 5 with rank, discipline, years since PhD, and Years of Service as the predictors. Given this information about a potential hire, which is legal to collect and use, we could certainly predict an appropriate range for an offer of employment.**   
+
+The residual plot shows constant variance.  
+The Normal Q-Q plot shows normality, the data points fall approximately along with the reference line.  
+The Scale-Location plot does not show a significant trend.  
+The last plot shows no outliers as the cook's distance lines are not visible.  
 
 The R-squared is 0.5247; this indicates that our model explains 52.47% of the average log salary variation.
 
@@ -232,13 +258,35 @@ yrs.since.phd=4
 attach(Salaries)
 newEmployee= data.frame(sex="Male", rank="AsstProf", discipline="A", yrs.service=1, yrs.since.phd=4)
 
-predictPI<- predict(SalM3, newEmployee, interval="prediction", level=0.95)
-predictPI
+predictPI<- predict(SalM5, newEmployee, interval="prediction", level=0.95)
+predictPI<-1/predictPI
+CIPred<- predict(SalM5, newEmployee, interval="confidence", level=0.95)
+CIPred<-1/CIPred
+rbind(predictPI,CIPred)
 ```
 
-The 95%-prediction interval indicates that the average log nine-month salary will be between 10.85 (exp(10.85816)= 51956.39 dollars) and 11.576 (exp(11.57622)=106534.1 dollars). 
+The 95%-prediction interval indicates that the average log nine-month salary will be between `r round(predictPI[3], digits = 0)` and `r round(predictPI[2], digits = 0)` while the 95 CI shows the salary to be between `r round(CIPred[3], digits = 0)` and `r round(CIPred[2],, digits = 0)`.
 
+**What if we used Model 2 which includes sex as a predictor?** 
+```{r}
+attach(Salaries)
+EmpMale= data.frame(sex="Male", rank="AsstProf", discipline="A", yrs.service=1, yrs.since.phd=4)
+EmpFem=data.frame(sex="Female", rank="AsstProf", discipline="A", yrs.service=1, yrs.since.phd=4)
 
+PIM<- predict(SalM2, EmpMale, interval="prediction", level=0.95)
+PIM<-1/PIM
+CIM<- predict(SalM2, EmpMale, interval="confidence", level=0.95)
+CIM<-1/CIM
+rbind(PIM,CIM)
+
+PIF<- predict(SalM2, EmpFem, interval="prediction", level=0.95)
+PIF<-1/PIF
+CIF<- predict(SalM2, EmpFem, interval="confidence", level=0.95)
+CIF<-1/CIF
+rbind(PIF,CIF)
+
+PIM[1]-PIF[1] #Male Prediction - Female Prediction
+```
 
 
 
