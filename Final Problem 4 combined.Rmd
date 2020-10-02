@@ -54,7 +54,7 @@ t.test(x=Salaries$salary[Salaries$sex=="Male"],y=Salaries$salary[Salaries$sex=="
 **Initial t-test does indicate $H_0: Male Salary <= Female Salary$ should be rejected, i.e. Male Salary is higher than Female. But the question is: how are other factors affecting salary? Upon further investigation, can we confirm this finding is true or disprove it?**  
 **There are a lot of factors which contribute to salary. We know experience, education level, etc. generally contribute to salary levels. What are their impacts here? Is discretion based on these things? If gender based discretion is occurring, could it be regarding promotions and resulting in a third order consequence of pay difference?**
 
-Tables ratios for rank and discipline between male and female employees:
+**Tables ratios for rank and discipline between male and female employees:**
 ```{r}
 RankTable<-as.data.frame.matrix(table(Salaries$rank,Salaries$sex))
 RankTable$FMRatio<-round(RankTable$Female/RankTable$Male,digits = 2)
@@ -88,6 +88,11 @@ t.test(x=Salaries$yrs.since.phd[Salaries$sex=="Male"],y=Salaries$yrs.since.phd[S
 
 **Reject $H_0$, on average Males have more years since PhD by approximately 6 years.**  
 
+**Mean Salaries by Rank:**
+```{r}
+tapply(Salaries$salary,Salaries$rank,mean)
+```
+
 **Fit the first Model: Salary ~ all predictors with no transformations**
 ```{r}
 SalM1<-lm(salary~.,data=Salaries) #Model 1, original with all data
@@ -107,7 +112,8 @@ invResPlot(SalM1)
 
 **Both *BoxCox* and *Inverse Response Plots* indicate the 1/Salary transformation may be best. And from the summary, the log of *yrs.since.phd* will likely be appropriate for the predictor side.**
 ```{r}
-SalM2<-lm(1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries) #Model 2
+fM2<-1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex #Model 2 formula
+SalM2<-lm(fM2,data=Salaries) #Model 2
 summary(SalM2)
 par(mfrow=c(2,2))
 plot(SalM2)
@@ -121,43 +127,65 @@ plot(SalM2)
 **We will test for non-constant variance of the second model by analyzing the relationship between residuals square and the fitted values by using the R function ncvTest()**
 ```{r}
 ncvTest(SalM2)
-plot(SalM2$residuals^2 ~ SalM2$fitted.values, main='Non-Constant-Variance Testplot')
+plot(SalM2$residuals^2 ~ SalM2$fitted.values, main='M2 NCV Testplot')
 ```
 
 **The ncvTest() provides us a p-value smaller than 0.05, meaning we fail to reject the null hypothesis. We can infer the data is homoscedastic; we do not have NCV. Generally, the residuals from a theoretical model equal zero. The plot indicates constant variance as well.**  
 
-To see if we can remove variables from our model, we will use the step-function.
+**For ease of model explanation, applying the log() transformation to the response would be preferable. We will test this also:**
 ```{r}
-step(SalM2,direction = "backward")
-step(SalM2,scope = list(lower=~1,upper=1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries),direction = "forward")
-step(SalM2,scope = list(lower=~1,upper=1/salary~rank+discipline+log(yrs.since.phd)+yrs.service+sex,data=Salaries))
+fM3<-log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service #model 3 formula
+SalM3<-lm(fM3,data=Salaries) #Model 3
+summary(SalM3)
+par(mfrow=c(2,2))
+plot(SalM3)
+ncvTest(SalM3)
+par(mfrow=c(1,1))
+plot(SalM3$residuals^2 ~ SalM3$fitted.values, main='M3 NCV Testplot')
 ```
-**These indicate we should remove *log(yrs.since.phd)*. We will create a few models just to make sure we have the best possible model.**
+
+**As we can see, the log(salary) transformation also produces a viable model with constant variance so we will proceed with log(salary) as the response in our models.**
+
+**Now, to see if we can remove variables from our model, we will use the step-function.**
+```{r}
+step(SalM3,direction = "backward")
+step(SalM3,scope = list(lower=~1,upper=fM3,data=Salaries),direction = "forward")
+step(SalM3,scope = list(lower=~1,upper=fM3,data=Salaries))
+```
+
+**Based on this variable selection, it appears the best approach is to leave all predictors in place.**
 
 **We will create another model to test a few interactions: rank*sex, rank*yrs.service, rank*discipline, sex*discipline.**  
 ```{r}
-SalM4<- lm(1/salary~sex+rank+discipline+log(yrs.since.phd)+yrs.service +rank*sex +rank*yrs.service +rank*discipline+sex*discipline, data= Salaries) #Model 4
+fM4<-log(salary)~sex+rank+discipline+log(yrs.since.phd)+yrs.service +rank*sex +rank*yrs.service +rank*discipline+sex*discipline #model 4 formula
+SalM4<- lm(fM4, data= Salaries) #Model 4
 step(SalM4, direction = "backward")
 ```
 
-**Our backward selection recommends us to remove all interactions and use our previous model. We could remove log(yrs.since.phd) because the AIC is the same as the model without removing any variables**
+**Our backward selection recommends us to remove all interactions and which is using our previous model (#3).**
 
-**Removing the interactions and *log(yrs.since.phd)* as the previous exercises have suggested, we generate the the following model and test it against Model 2.**
+**Additionally, the backward selection appeared to show little change by removing log(yrs.since.phd) and sex. we will explore removing these below.**
+**1) generating model 5 without log(yrs.since.phd) and comparing to Model 3**
 ```{r}
-SalM3<- lm(1/salary~sex+rank+discipline+yrs.service, data= Salaries)
-AIC(SalM2,SalM3)
-```
-**As we can see, the AIC for Model 3 (without *log(yrs.since.phd)*) is marginally better, so we will remove it.**  
-**However, since we are exploring the influence of sex first to determine if a pay gap exists, we should test a model excluding sex as a predictor. Model 5:**
-```{r}
-SalM5<- lm(1/salary~rank+discipline+yrs.service, data= Salaries)
+fM5<-log(salary)~sex+rank+discipline+yrs.service
+SalM5<- lm(fM5, data= Salaries)
 AIC(SalM3,SalM5)
 ```
-We always will look for smaller values of AIC (lowest sum of squares least complexity). Model 3 has a slightly smaller AIC score and we recommend to run a 5fold cross validation to find out which model is really better.
 
-We will conduct a 5 Fold Cross-Validation, to compare Model 5 and Model 3.
-$Model\ 3:\ 1/salary:rank+discipline+yrs.service+sex$
-$Model\ 5:\ 1/salary:rank+discipline+yrs.service$
+**As we can see, the AIC for Model 3 (with *log(yrs.since.phd)*) is better, so we will continue with Model 3.**  
+**However, since we are exploring the influence of sex first to determine if a pay gap exists, we should test a model excluding sex as a predictor. Model 6:**
+```{r}
+fM6<-log(salary)~rank+discipline+log(yrs.since.phd)+yrs.service
+SalM6<- lm(fM6, data= Salaries)
+step(SalM6,direction = "backward")
+AIC(SalM3,SalM6)
+```
+
+**We always will look for smaller values of AIC (lowest sum of squares least complexity). Model 3 has a slightly smaller AIC score and we recommend to run a 5fold cross validation to find out which model is really better.**
+
+We will conduct a 5 Fold Cross-Validation, to compare Model 6 and Model 3.
+$Model\ 3:\ log(salary):sex+rank+discipline+log(yrs.since.phd)+yrs.service$
+$Model\ 6:\ log(salary):rank+discipline+log(yrs.since.phd)+yrs.service$
 ```{r}
 library(foreach)
 set.seed(2021)
@@ -175,8 +203,8 @@ k=foreach(i=1:5)%do%
   {
     sets=which(id==i)
       # remove set
-      Mod1<- lm(1/salary~rank+discipline+yrs.service+sex, data= Salaries[-sets,])
-      Mod2<- lm(1/salary~rank+discipline+yrs.service,data=Salaries[-sets,])
+      Mod1<- lm(fM3, data= Salaries[-sets,])
+      Mod2<- lm(fM6,data=Salaries[-sets,])
       # predict the removed-set with each model
       pm1<- predict(Mod1, newdata=Salaries[sets,])
       pm2<- predict(Mod2, newdata=Salaries[sets,])
@@ -191,132 +219,89 @@ k=foreach(i=1:5)%do%
   sum(sapply(k,function(d){d$Rssm2}))
   
 ```
-The AIC scores for both models are the same. Applying 5-fold cross validation to compare these models shows there is not an improvement by adding sex as a predictor. Therefore, the simpler model excluding sex should be used and a gender based pay gap may not exist. Given that Model 5 happens to be a sub-model of Model 3, we can also compare them via ANOVA:**
+
+**The AIC scores for both models very nearly the same. Applying 5-fold cross validation to compare these models shows there is a potentially negligible improvement by adding sex as a predictor. Therefore, the simpler model excluding sex should be used and a gender based pay gap may not exist. Given that Model 6 happens to be a sub-model of Model 3, we can also compare them via ANOVA:**
 
 ```{r}
-anova(SalM5,SalM3)
+anova(SalM6,SalM3)
 ```
-**With $p-value > 0.05$, we fail to reject $H_0$ => conclude the models are the same => use the less complex *Model 6* excluding sex as a predictor. This confirms the previous assertion that a gender based pay gap does not exist.**
+
+**With $p-value > 0.05$, we fail to reject $H_0$ => conclude the models are the same => use the less complex *Model 6* excluding sex as a predictor. This confirms the previous assertion that a gender based pay gap does not exist and the best model is $Model\ 6:\ log(salary):rank+discipline+log(yrs.since.phd)+yrs.service$**
 
 ## Part 2
 *provide insights on other drivers that you may see of salary in the data(i.e. provide a best model).Is your model suitable to make offers based on the information provided?  Explain your reasoning.  Provide insights into any other information you find of interest.*  
 
-We will create the same model but instead using 1/Salary we will use log-transformation. 
-We will look at the plot and summary for any insights and run the ncvTest. 
+**As we saw previously, log(yrs.since.phd) may also be removed. To explore this, we generate $Model\ 7:\ log(salary):rank+discipline+yrs.service$ and compare it to $Model\ 6:\ log(salary):rank+discipline+log(yrs.since.phd)+yrs.service$**
 ```{r}
-SalM6<- lm(log(salary)~rank+discipline+yrs.service, data= Salaries)
-summary(SalM6)
-ncvTest(SalM6)
+fM7<-log(salary)~rank+discipline+yrs.service
+SalM7<- lm(fM7, data= Salaries)
+step(SalM7,direction = "backward")
+anova(SalM7,SalM6)
 par(mfrow=c(2,2))
-plot(SalM6)
+plot(SalM7)
 ```
-The residual plot shows constant variance, and the ncvTest provides us a p-value smaller than 0.05, meaning we fail to reject the null hypothesis. We can infer the data is homoscedastic; we do not have NCV.**  
-The Normal Q-Q plot shows normality, the data points fall approximately along with the reference line.**  
-The Scale-Location plot does not show a significant trend.**  
-The last plot does not show the cook's distance lines in the window; we do not have data points above 0.5, indicating no outliers being present.**  
 
-The R-squared is 0.5186; this indicates that our model explains 51.86% of the average log salary variation.
-
-We will conduct a 5 Fold Cross-Validation, to compare Model 6 and Model 3.
-$Model\ 3:\ 1/salary:rank+discipline+yrs.service$
-$Model\ 5:\ log(salary):rank+discipline+yrs.service$
-
-First, we will split the data into 5 randomly mixed sets and add a sample ID on each set. We will set the seed to 2020.      
-After that, We will combine all the prediction errors for the prediction error metric.
-
-```{r}
-library(foreach)
-set.seed(2020)
-##creating a random selection of the observation numbers
-Samp=sample(1:dim(Salaries)[1],dim(Salaries),replace=FALSE)
-id=rep(5, dim(Salaries)[1])
-id[Samp[1:99]]=1
-id[Samp[100:198]]=2
-id[Samp[199:297]]=3
-id[Samp[298:396]]=4
-  
-Rssm1=0
-Rssm2=0
-k=foreach(i=1:5)%do%
-  {
-    sets=which(id==i)
-      # remove set
-      Mod1<- lm(1/salary~rank+discipline+yrs.service, data= Salaries[-sets,])
-      Mod2<- lm(log(salary)~rank+discipline+yrs.service,data=Salaries[-sets,])
-      # predict the removed-set with each model
-      pm1<- predict(Mod1, newdata=Salaries[sets,])
-      pm2<- predict(Mod2, newdata=Salaries[sets,])
-      # How bad is my model  / RSS
-      Rssm1=Rssm1+sum((log(Salaries$salary[sets])-pm1)^2)
-      Rssm2=Rssm2+sum((log(Salaries$salary[sets])-pm2)^2)
-      li=list(Rssm1=Rssm1,Rssm2=Rssm2)
-      return(li)
-  }
-  # add rssm values together
-  sum(sapply(k,function(d){d$Rssm1}))
-  sum(sapply(k,function(d){d$Rssm2}))
-  
-```
-We always will look for smaller values of AIC (lowest sum of squares least complexity). Model 6 has a smaller AIC score and we will use this model to present any insights to our client because it is easier to interpret. 
-
-**Through the exploration above, it appears the best model is Model 6 with rank, discipline, and Years of Service as the predictors. Given this information about a potential hire, which is legal to collect and use, we could certainly predict an appropriate range for an offer of employment.**   
+**Through the exploration above, it appears the best model is Model 7 with rank, discipline, and Years of Service as the predictors. Given this information about a potential hire, which is legal to collect and use, we could certainly predict an appropriate range for an offer of employment.**   
 
 We will look at our summary and effect plot for any insights.
-We will add gender to our effect plot to show the differents.
+We will add gender to our effect plot to show the differences.
 ```{r}
-SalM7<- lm(log(salary)~rank+discipline+yrs.service+sex,data=Salaries[-sets,])
 library(effects)
-par(mfrow=c(2,2))
-summary(SalM6)
-plot(allEffects(SalM6))
-plot(allEffects(SalM7))
+par(mfrow=c(1,1))
+summary(SalM7)
+plot(allEffects(SalM7),main = "Model 7")
+plot(allEffects(SalM5), main = "M5 w/ sex")
 ```
 
-The R-squared is 0.5186; this indicates that our model explains 51.86% of the average log salary variation.
+The R-squared is 0.5186; this indicates that our model explains 51.86% of the average log salary variation. 
 
-The intercept 11.22 is the average log salary for employees with the rank Associate Professor and discipline theoretical department.
+The intercept 11.22 is the average log salary for employees with the rank Associate Professor and discipline theoretical department.  
+The p-value for yrs.service would indicate the slope coefficient is 0, but as can seen in the variable selection above, AIC is slightly better with yrs.service left in the model.  
 
 The p-value of rank is significant, which indicates that the levels of rank are associated with significant different salaries when all other variables are held constant.
 The p-value of discipline is significant, which indicates that discipline levels are associated with significant different salaries when all other variables are held constant.
+*This likely effectively adjusts for a years service/rank plateau in salary (pay caps likely exists per rank/discipline regardless of total years, and other similar scenarios)*  
 
-Effect Plot:
-When switching from Associate Professor to Professor, the average log salary increases significantly when all other variables are held constant. 
-The average log salary increases when we switch levels of discipline A to B, when all other variables are held constant.
-The average log salary decreases when years of service increases when all other variables are held constant.
+Effect Plot:  
+When switching from Associate Professor to Professor, the average log salary increases significantly when all other variables are held constant.  
+The average log salary increases when we switch levels of discipline A to B, when all other variables are held constant.  
+The average log salary decreases when years of service increases when all other variables are held constant.  
 
-Our T-tests fom part 1 provides us the following insights.
-On average Male Salary is higher than Female.
-Applied Disciplines have a larger mean salary of approximately $10,000. 
-On average Males have more years of service by approximately 6 years. 
-On average Males have more years since PhD by approximately 6 years. 
+Our T-tests and tables from part 1 provides us the following insights:  
+On average Male Salary is higher than Female.  
+Applied Disciplines have a larger mean salary of approximately $10,000.  
+On average Males have more years of service by approximately 6 years.  
+On average Males have more years since PhD by approximately 6 years.  
+Females only represent 9% of this data set, have an even ratio between disciplines, and decreasing ratio as rank increases  
 
-Create Table for discipline to see ratio between male and female
+Create Table for discipline to see ratio between male and female:  
 ```{r}
 table(Salaries$discipline, Salaries$sex)
 ```
 
 ## Conclusion : 
-The effect Plot with the variable sex indicates that a female employee can earn less than or equal to male employees. 
-Based on the tests we conduct above, we do have a salary gap, but probably not a gender pay gap. 
-The gap coud be caused due to the fact that the average male has more years of service by approximately 6 years and see the table above, we have more male workers in discipline B, which alone causes a higher salary. We can see our data is not split evenly; we do have more male than female wages. To determine if gender affects the pay is way more complicated than looking at p-values; we have different predictors with different levels, which influence our response in different ways.
+The effect Plot with the variable sex indicates that a female employee can earn less than or equal to male employees.   
+Based on the tests we conduct above, we do have a salary gap, but it is unlikely to be due to gender discrimination but due to the differences in the predominant predictors rank and discipline.  
+**To ensure discrimination is not present regarding rank/promotions, a further analysis on *time to promotion* may be prudent provided the necessary data**  
+The gap could be caused due to the fact that the average male has more years of service by approximately 6 years and see the table above, we have 32 more male workers in discipline B, which alone causes a higher salary. We can see our data is not split evenly; we do have more males than females. To determine if gender affects the pay is way more complicated than looking at p-values; we have different predictors with different levels, which influence our response in different ways.  
 
-We think our model is suitable and can deliver offers based on the provided information because we build our model with all significant predictors, which influence our response variable Salary. For example, we predict the salary range from a new employee with the following attributes:
-rank="AsstProf", 
-discipline="A", 
-yrs.service=1
+We think our model is suitable for estimating employment offers. For example, we predict the salary range from a new potential employee with the following attributes:  
+rank="AsstProf",  
+discipline="A",  
+yrs.service=1  
 
 95% PI and CI
 ```{r}
 attach(Salaries)
 newEmployee= data.frame(rank="AsstProf", discipline="A", yrs.service=1)
 
-predictPI<- predict(SalM6, newEmployee, interval="prediction", level=0.95)
+predictPI<- predict(SalM7, newEmployee, interval="prediction", level=0.95)
 # convert natural log to decimal
 predictPI<-exp(predictPI)
-CIPred<- predict(SalM6, newEmployee, interval="confidence", level=0.95)
+CIPred<- predict(SalM7, newEmployee, interval="confidence", level=0.95)
 # convert natural log to decimal
 CIPred<-exp(CIPred)
 rbind(predictPI,CIPred)
 ```
 
-The 95%-prediction interval indicates that the average nine-month salary will be between `r round(predictPI[3], digits = 0)` and `r round(predictPI[2], digits = 0)` while the 95 CI shows the salary to be between `r round(CIPred[3], digits = 0)` and `r round(CIPred[2],, digits = 0)`.
+The 95%-prediction interval indicates that the average nine-month salary will be between \$52,000 and \$106,000 while the 95 CI shows the salary to be between \$70,000 and \$78,000.
